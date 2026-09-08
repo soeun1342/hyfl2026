@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>전기세 아끼기 - 에어컨 작동 여부 진단</title>
+    <!-- Teachable Machine 필수 라이브러리 (TensorFlow.js 및 Teachable Machine Image) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <style>
+        /* CSS 변수를 활용한 통합 색상 및 디자인 시스템 */
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --primary-light: #eff6ff;
+            --bg-main: #f8fafc;
+            --surface: #ffffff;
+            --text-main: #0f172a;
+            --text-sub: #475569;
+            --text-muted: #94a3b8;
+            --border-color: #e2e8f0;
+            
+            /* 클래스별 상태 색상 (켜짐: 시원한 파랑 / 꺼짐: 차분한 Slate) */
+            --status-on: #0284c7;
+            --status-on-bg: #e0f2fe;
+            --status-off: #64748b;
+            --status-off-bg: #f1f5f9;
+            
+            --radius-main: 16px;
+            --radius-sub: 12px;
+            --radius-btn: 8px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -1px rgba(0,0,0,0.04);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -2px rgba(0,0,0,0.03);
+            --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 기본 리셋 및 전체 레이아웃 설정 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding: 24px 16px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 580px;
+            background: var(--surface);
+            border-radius: var(--radius-main);
+            padding: 28px;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+
+        /* 타이포그래피 계층화 및 헤더 디자인 */
+        header {
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+            margin-bottom: 24px;
+        }
+
+        header h1 {
+            font-size: 1.65rem;
+            font-weight: 800;
+            color: var(--text-main);
+            margin-bottom: 6px;
+            letter-spacing: -0.02em;
+        }
+
+        header p {
+            font-size: 0.95rem;
+            color: var(--text-sub);
+            font-weight: 500;
+        }
+
+        /* 정보 카드 스타일 */
+        .info-card {
+            background-color: var(--bg-main);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sub);
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            font-size: 0.9rem;
+        }
+
+        .info-card p {
+            margin-bottom: 6px;
+            color: var(--text-sub);
+            display: flex;
+            align-items: center;
+        }
+
+        .info-card p strong {
+            color: var(--text-main);
+            min-width: 120px;
+            display: inline-block;
+        }
+
+        .info-card p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* 메인 카드 세부 스타일 */
+        .main-card {
+            background-color: var(--surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sub);
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .section-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 16px;
+            text-align: center;
+            letter-spacing: -0.01em;
+        }
+
+        /* 마이크로 인터랙션이 적용된 탭 버튼 */
+        .tab-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            background-color: var(--bg-main);
+            padding: 4px;
+            border-radius: 10px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 10px 16px;
+            border: none;
+            background-color: transparent;
+            color: var(--text-sub);
+            font-weight: 600;
+            border-radius: var(--radius-btn);
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: var(--transition-smooth);
+        }
+
+        .tab-btn.active {
+            background-color: var(--surface);
+            color: var(--primary);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* 입력 인터페이스 제어 */
+        .input-control {
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .input-control.active {
+            display: block;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        /* 인터랙티브 버튼 스타일 */
+        .btn {
+            flex: 1;
+            padding: 12px 18px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border: none;
+            border-radius: var(--radius-btn);
+            cursor: pointer;
+            transition: var(--transition-smooth);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background-color: #64748b;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #475569;
+        }
+
+        .btn-danger {
+            background-color: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: #dc2626;
+        }
+
+        .file-input-wrapper {
+            width: 100%;
+        }
+
+        .file-input-wrapper input[type="file"] {
+            display: none;
+        }
+
+        .file-label {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            background-color: var(--bg-main);
+            border: 1px dashed var(--border-color);
+            color: var(--text-sub);
+            font-weight: 600;
+            text-align: center;
+            border-radius: var(--radius-btn);
+            cursor: pointer;
+            transition: var(--transition-smooth);
+        }
+
+        .file-label:hover {
+            background-color: var(--primary-light);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        /* 디스플레이 컨테이너 & 드래그앤드롭 반응 */
+        .display-container {
+            width: 100%;
+            height: 280px;
+            background-color: var(--bg-main);
+            border: 2px dashed var(--border-color);
+            border-radius: var(--radius-sub);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            margin-bottom: 16px;
+            position: relative;
+            transition: var(--transition-smooth);
+        }
+
+        .display-container.dragover {
+            background-color: var(--primary-light);
+            border-color: var(--primary);
+            transform: scale(1.01);
+        }
+
+        .display-container img, 
+        .display-container canvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+
+        .placeholder-text {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            text-align: center;
+            pointer-events: none;
+            padding: 16px;
+            line-height: 1.5;
+        }
+
+        /* 세련된 로딩 스피너 UI */
+        .spinner {
+            display: none;
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border-color);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s cubic-bezier(0.6, 0.2, 0.4, 0.8) infinite;
+            margin: 0 auto 12px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 피드백 메시지 스타일 */
+        .status-message {
+            font-size: 0.9rem;
+            text-align: center;
+            margin-bottom: 16px;
+            color: var(--text-sub);
+            min-height: 22px;
+            font-weight: 500;
+        }
+
+        .error-message {
+            color: #dc2626;
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            padding: 10px 14px;
+            border-radius: var(--radius-btn);
+            font-size: 0.85rem;
+            margin-bottom: 16px;
+            display: none;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        /* 상단 예측 결과 뱃지 디자인 */
+        .result-box {
+            background-color: var(--bg-main);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sub);
+            padding: 20px;
+        }
+
+        .top-prediction {
+            text-align: center;
+            padding-bottom: 16px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .top-prediction .label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 6px;
+        }
+
+        .status-badge-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 8px 0;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 1.25rem;
+            font-weight: 700;
+            transition: var(--transition-smooth);
+            background-color: var(--surface);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+        }
+
+        /* 상태별 뱃지 디자인 강조 */
+        .status-badge.on {
+            background-color: var(--status-on-bg);
+            color: var(--status-on);
+            border-color: rgba(2, 132, 199, 0.2);
+        }
+
+        .status-badge.off {
+            background-color: var(--status-off-bg);
+            color: var(--status-off);
+            border-color: rgba(100, 116, 139, 0.2);
+        }
+
+        .top-prediction .notice {
+            font-size: 0.75rem;
+            color: #ef4444;
+            margin-top: 6px;
+        }
+
+        /* 프로그래스 바 시각화 개선 */
+        .class-result {
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            border-radius: var(--radius-btn);
+            transition: var(--transition-smooth);
+        }
+
+        .class-result.highlight {
+            background-color: var(--surface);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .class-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+            font-weight: 600;
+            color: var(--text-sub);
+        }
+
+        .class-result.highlight .class-info {
+            color: var(--text-main);
+        }
+
+        .progress-bar-bg {
+            width: 100%;
+            height: 12px;
+            background-color: #e2e8f0;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background-color: var(--text-muted);
+            width: 0%;
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s;
+        }
+
+        /* 클래스 특성에 맞춘 상이한 테마 색상 적용 */
+        .class-result.is-on .progress-bar-fill {
+            background-color: var(--status-on);
+        }
+
+        .class-result.is-off .progress-bar-fill {
+            background-color: var(--status-off);
+        }
+
+        /* 한계점 안내 및 푸터 */
+        .limitations {
+            background-color: #fffbebf5;
+            border: 1px solid #fde68a;
+            border-radius: var(--radius-sub);
+            padding: 14px 16px;
+            font-size: 0.85rem;
+            color: #92400e;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        .limitations strong {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 0.9rem;
+            color: #78350f;
+        }
+
+        footer {
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border-color);
+            padding-top: 16px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- 헤더 영역 -->
+    <header>
+        <h1>전기세 아끼기</h1>
+        <p>인공지능으로 에어컨의 켜짐/꺼짐 상태를 진단합니다</p>
+    </header>
+
+    <!-- 문제 및 목표 안내 -->
+    <div class="info-card">
+        <p><strong>해결하려는 문제:</strong> 교실 내 에어컨 작동 여부 확인</p>
+        <p><strong>주요 사용자:</strong> 에어컨이 있는 교실을 사용하는 사람들</p>
+    </div>
+
+    <!-- 메인 체험 기능 영역 -->
+    <div class="main-card">
+        <div class="section-title">에어컨 상태 분석 체험하기</div>
+
+        <!-- 입력 방식 선택 탭 -->
+        <div class="tab-buttons">
+            <button class="tab-btn active" id="btn-tab-camera" onclick="switchMode('camera')">카메라 실시간</button>
+            <button class="tab-btn" id="btn-tab-file" onclick="switchMode('file')">사진 업로드</button>
+        </div>
+
+        <!-- 오류 메시지 출력 영역 -->
+        <div id="error-message" class="error-message"></div>
+
+        <!-- 모드 1: 카메라 제어 버튼 -->
+        <div id="camera-controls" class="input-control active">
+            <div class="btn-group">
+                <button id="btn-camera-start" class="btn btn-primary" onclick="startCamera()">카메라 시작</button>
+                <button id="btn-camera-flip" class="btn btn-secondary" onclick="toggleCameraFacing()" style="display: none;">전/후면 전환</button>
+            </div>
+            <button id="btn-camera-stop" class="btn btn-danger" onclick="stopCamera()" style="display: none; width: 100%;">카메라 중지</button>
+        </div>
+
+        <!-- 모드 2: 파일 업로드 제어 -->
+        <div id="file-controls" class="input-control">
+            <div class="file-input-wrapper">
+                <label for="image-upload" class="file-label" tabindex="0" onkeydown="handleLabelKeyDown(event)">사진 파일 선택하기</label>
+                <input type="file" id="image-upload" accept="image/*" onchange="handleImageUpload(event)">
+            </div>
+        </div>
+
+        <!-- 상태 및 로딩 표시 -->
+        <div id="spinner" class="spinner"></div>
+        <div id="status-message" class="status-message">시작 버튼을 누르거나 사진을 올려주세요.</div>
+
+        <!-- 미디어 표시 영역 (드래그 앤 드롭 지원) -->
+        <div class="display-container" id="display-container" 
+             ondragover="handleDragOver(event)" 
+             ondragleave="handleDragLeave(event)" 
+             ondrop="handleDrop(event)">
+            <span id="placeholder-text" class="placeholder-text">화면이 표시되는 영역입니다<br><small style="color: var(--text-muted);">(사진을 이곳에 드래그해도 됩니다)</small></span>
+            <img id="image-preview" style="display: none;" alt="업로드 에어컨 사진 미리보기">
+        </div>
+
+        <!-- 사진 리셋 버튼 -->
+        <button id="btn-reset-file" class="btn btn-secondary" onclick="resetFilePreview()" style="display: none; width: 100%; margin-bottom: 20px;">사진 다시 올리기</button>
+
+        <!-- 예측 결과 표시 영역 -->
+        <div class="result-box">
+            <div class="top-prediction">
+                <div class="label">가장 높은 확률의 예측 결과</div>
+                <div class="status-badge-wrapper">
+                    <div id="top-result-badge" class="status-badge">
+                        <span id="top-result-text">-</span>
+                    </div>
+                </div>
+                <div class="notice">※ 가장 높은 확률이 반드시 정답은 아닐 수 있습니다.</div>
+            </div>
+            <!-- 클래스별 확률 목록이 생성되는 곳 -->
+            <div id="class-results-list"></div>
+        </div>
+    </div>
+
+    <!-- 모델의 한계 및 주의사항 -->
+    <div class="limitations">
+        <strong>모델의 한계 및 확인 필요 사항</strong>
+        사진 각도가 너무 멀거나 날개의 움직임을 잘 확인할 수 없는 경우 에어컨의 켜짐과 꺼짐을 잘 구분하지 못할 수 있습니다. <u>결과를 사람의 눈으로 다시 한 번 확인해주세요.</u>
+    </div>
+
+    <!-- 팀 정보 푸터 -->
+    <footer>
+        <p>팀명: 졸리당 | 팀원: 이예림, 이은별, 이지민</p>
+    </footer>
+</div>
+
+<script>
+    // 티처블 머신 모델 주소 설정 (끝에 / 붙임)
+    const MODEL_URL = "https://teachablemachine.withgoogle.com/models/79O8wPhIq/";
+
+    // 상태 관리 변수
+    let model = null;
+    let webcam = null;
+    let isModelLoading = false;
+    let isPredicting = false;
+    let animationFrameId = null;
+    let currentMode = 'camera'; // 'camera' 또는 'file'
+    let currentObjectURL = null;
+    let useFacingMode = "environment"; // "user"(전면) 또는 "environment"(후면)
+
+    // DOM 요소 참조
+    const statusMsg = document.getElementById("status-message");
+    const errorMsg = document.getElementById("error-message");
+    const spinner = document.getElementById("spinner");
+    const displayContainer = document.getElementById("display-container");
+    const placeholderText = document.getElementById("placeholder-text");
+    const imagePreview = document.getElementById("image-preview");
+    const topResultBadge = document.getElementById("top-result-badge");
+    const topResultText = document.getElementById("top-result-text");
+    const classResultsList = document.getElementById("class-results-list");
+    const btnCameraStart = document.getElementById("btn-camera-start");
+    const btnCameraStop = document.getElementById("btn-camera-stop");
+    const btnCameraFlip = document.getElementById("btn-camera-flip");
+    const btnResetFile = document.getElementById("btn-reset-file");
+
+    // 에러 메시지 표시
+    function showError(message) {
+        errorMsg.innerText = message;
+        errorMsg.style.display = "block";
+    }
+
+    // 에러 메시지 초기화
+    function clearError() {
+        errorMsg.innerText = "";
+        errorMsg.style.display = "none";
+    }
+
+    // 스피너 토글
+    function toggleSpinner(show) {
+        spinner.style.display = show ? "block" : "none";
+    }
+
+    // 모델 로드 함수
+    async function loadModel() {
+        if (model) return true;
+        if (isModelLoading) return false;
+
+        isModelLoading = true;
+        toggleSpinner(true);
+        statusMsg.innerText = "인공지능 모델을 불러오는 중입니다...";
+        clearError();
+
+        try {
+            const modelURL = MODEL_URL + "model.json";
+            const metadataURL = MODEL_URL + "metadata.json";
+            
+            model = await tmImage.load(modelURL, metadataURL);
+            
+            setupResultUI();
+            statusMsg.innerText = "모델 불러오기 완료.";
+            toggleSpinner(false);
+            isModelLoading = false;
+            return true;
+        } catch (err) {
+            console.error(err);
+            showError("모델을 불러오지 못했습니다. 네트워크 연결 상태나 주소를 확인해주세요.");
+            statusMsg.innerText = "모델 로딩 실패";
+            toggleSpinner(false);
+            isModelLoading = false;
+            return false;
+        }
+    }
+
+    // 메타데이터의 실제 클래스 이름을 바탕으로 접근성 및 맞춤형 테마 클래스 UI 생성
+    function setupResultUI() {
+        classResultsList.innerHTML = "";
+        const maxPredictions = model.getTotalClasses();
+        
+        for (let i = 0; i < maxPredictions; i++) {
+            const className = model.getClassLabels()[i];
+            
+            // 상태별 색상 테마 구분을 위한 클래스 지정
+            let themeClass = "";
+            if (className.includes("켜짐")) {
+                themeClass = "is-on";
+            } else if (className.includes("꺼짐")) {
+                themeClass = "is-off";
+            }
+
+            const classItem = document.createElement("div");
+            classItem.className = `class-result ${themeClass}`;
+            classItem.id = `class-item-${i}`;
+            classItem.innerHTML = `
+                <div class="class-info">
+                    <span>${className}</span>
+                    <span id="percent-${i}">0%</span>
+                </div>
+                <div class="progress-bar-bg" 
+                     role="progressbar" 
+                     aria-label="${className} 확률" 
+                     aria-valuemin="0" 
+                     aria-valuemax="100" 
+                     aria-valuenow="0" 
+                     id="progress-${i}">
+                    <div id="bar-${i}" class="progress-bar-fill"></div>
+                </div>
+            `;
+            classResultsList.appendChild(classItem);
+        }
+    }
+
+    // 입력 모드 전환 (카메라 <-> 사진 업로드)
+    function switchMode(mode) {
+        if (currentMode === mode) return;
+        currentMode = mode;
+        clearError();
+
+        document.getElementById("btn-tab-camera").classList.toggle("active", mode === 'camera');
+        document.getElementById("btn-tab-file").classList.toggle("active", mode === 'file');
+
+        document.getElementById("camera-controls").classList.toggle("active", mode === 'camera');
+        document.getElementById("file-controls").classList.toggle("active", mode === 'file');
+
+        if (mode === 'camera') {
+            resetFilePreview();
+            statusMsg.innerText = "카메라 시작 버튼을 눌러주세요.";
+        } else {
+            stopCamera();
+            statusMsg.innerText = "사진 파일을 선택하거나 이곳에 드래그해주세요.";
+        }
+    }
+
+    // 카메라 시작
+    async function startCamera() {
+        clearError();
+        btnCameraStart.disabled = true;
+
+        const loaded = await loadModel();
+        if (!loaded) {
+            btnCameraStart.disabled = false;
+            return;
+        }
+
+        try {
+            toggleSpinner(true);
+            statusMsg.innerText = "카메라 권한 확인 및 연결 중...";
+            
+            const isFlip = (useFacingMode === "user");
+            
+            if (webcam) {
+                webcam.stop();
+            }
+
+            webcam = new tmImage.Webcam(280, 280, isFlip);
+            await webcam.setup({ facingMode: useFacingMode }); 
+            await webcam.play();
+
+            resetDisplayArea();
+            displayContainer.appendChild(webcam.canvas);
+
+            isPredicting = true;
+            btnCameraStart.style.display = "none";
+            btnCameraStop.style.display = "block";
+            btnCameraFlip.style.display = "inline-flex";
+            btnCameraStart.disabled = false;
+            toggleSpinner(false);
+            statusMsg.innerText = "실시간 분석 중...";
+
+            loopCamera();
+        } catch (err) {
+            console.error(err);
+            showError("카메라를 사용할 수 없습니다. 권한 승인 상태나 장치를 확인해주세요.");
+            statusMsg.innerText = "카메라 실행 실패";
+            toggleSpinner(false);
+            btnCameraStart.disabled = false;
+            stopCamera();
+        }
+    }
+
+    // 전/후면 카메라 전환
+    async function toggleCameraFacing() {
+        useFacingMode = (useFacingMode === "user") ? "environment" : "user";
+        if (isPredicting) {
+            await startCamera();
+        }
+    }
+
+    // 카메라 지속 예측 루프
+    async function loopCamera() {
+        if (isPredicting && webcam) {
+            webcam.update();
+            await predict(webcam.canvas);
+            animationFrameId = requestAnimationFrame(loopCamera);
+        }
+    }
+
+    // 카메라 중지 및 정리
+    function stopCamera() {
+        isPredicting = false;
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+        }
+        if (webcam) {
+            webcam.stop();
+            webcam = null;
+        }
+
+        const canvas = displayContainer.querySelector("canvas");
+        if (canvas) {
+            canvas.remove();
+        }
+
+        placeholderText.style.display = "block";
+        btnCameraStart.style.display = "block";
+        btnCameraStop.style.display = "none";
+        btnCameraFlip.style.display = "none";
+        
+        if (currentMode === 'camera') {
+            statusMsg.innerText = "카메라가 중지되었습니다.";
+        }
+    }
+
+    // 이미지 파일 선택 처리
+    function handleImageUpload(event) {
+        const file = event.target.files[0];
+        if (file) {
+            processImageFile(file);
+        }
+    }
+
+    // 키보드 접근성: Label에서 Enter 키 눌렀을 때 파일 창 열기
+    function handleLabelKeyDown(event) {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            document.getElementById("image-upload").click();
+        }
+    }
+
+    // 드래그 앤 드롭 이벤트 처리
+    function handleDragOver(event) {
+        event.preventDefault();
+        if (currentMode === 'file') {
+            displayContainer.classList.add("dragover");
+        }
+    }
+
+    function handleDragLeave(event) {
+        event.preventDefault();
+        displayContainer.classList.remove("dragover");
+    }
+
+    function handleDrop(event) {
+        event.preventDefault();
+        displayContainer.classList.remove("dragover");
+
+        if (currentMode !== 'file') {
+            switchMode('file');
+        }
+
+        const files = event.dataTransfer.files;
+        if (files && files.length > 0) {
+            processImageFile(files[0]);
+        }
+    }
+
+    // 이미지 파일 통합 검증 및 분석
+    async function processImageFile(file) {
+        clearError();
+
+        if (!file.type.startsWith("image/")) {
+            showError("올바른 이미지 파일(jpg, png 등)을 올려주세요.");
+            return;
+        }
+
+        if (currentObjectURL) {
+            URL.revokeObjectURL(currentObjectURL);
+            currentObjectURL = null;
+        }
+
+        const loaded = await loadModel();
+        if (!loaded) return;
+
+        toggleSpinner(true);
+        statusMsg.innerText = "이미지를 읽는 중입니다...";
+
+        currentObjectURL = URL.createObjectURL(file);
+        
+        resetDisplayArea();
+        imagePreview.src = currentObjectURL;
+        imagePreview.style.display = "block";
+        btnResetFile.style.display = "block";
+
+        imagePreview.onload = async () => {
+            statusMsg.innerText = "이미지 분석 중...";
+            try {
+                await predict(imagePreview);
+                toggleSpinner(false);
+                statusMsg.innerText = "분석이 완료되었습니다.";
+            } catch (err) {
+                console.error(err);
+                showError("이미지 분석 중 오류가 발생했습니다. 다른 사진으로 시도해 주세요.");
+                toggleSpinner(false);
+                statusMsg.innerText = "분석 실패";
+            }
+        };
+
+        imagePreview.onerror = () => {
+            toggleSpinner(false);
+            showError("이미지 파일을 읽을 수 없습니다. 정상적인 이미지 파일인지 확인해주세요.");
+            statusMsg.innerText = "파일 읽기 실패";
+            resetFilePreview();
+        };
+    }
+
+    // 화면 영역 초기화
+    function resetDisplayArea() {
+        placeholderText.style.display = "none";
+        imagePreview.style.display = "none";
+        const canvas = displayContainer.querySelector("canvas");
+        if (canvas) {
+            canvas.remove();
+        }
+    }
+
+    // 파일 미리보기 및 결과 완전 리셋
+    function resetFilePreview() {
+        if (currentObjectURL) {
+            URL.revokeObjectURL(currentObjectURL);
+            currentObjectURL = null;
+        }
+        imagePreview.src = "";
+        imagePreview.style.display = "none";
+        placeholderText.style.display = "block";
+        btnResetFile.style.display = "none";
+        document.getElementById("image-upload").value = "";
+        
+        if (model) {
+            setupResultUI();
+        }
+        topResultText.innerText = "-";
+        topResultBadge.className = "status-badge";
+        
+        if (currentMode === 'file') {
+            statusMsg.innerText = "사진 파일을 선택하거나 이곳에 드래그해주세요.";
+        }
+    }
+
+    // 모델 분석 및 뱃지/테마 시각화 공통 처리 함수
+    async function predict(imageElement) {
+        if (!model) return;
+
+        const predictions = await model.predict(imageElement);
+        
+        let highestProb = -1;
+        let highestIndex = -1;
+        let highestClassName = "";
+
+        // 1차 순회: 최고 확률 탐색 및 프로그래스 바 수치 업데이트
+        for (let i = 0; i < predictions.length; i++) {
+            const className = predictions[i].className;
+            const probability = predictions[i].probability;
+            const percentage = Math.round(probability * 100);
+
+            const percentElement = document.getElementById(`percent-${i}`);
+            const barElement = document.getElementById(`bar-${i}`);
+            const progressBg = document.getElementById(`progress-${i}`);
+
+            if (percentElement && barElement) {
+                percentElement.innerText = `${percentage}%`;
+                barElement.style.width = `${percentage}%`;
+                if (progressBg) {
+                    progressBg.setAttribute("aria-valuenow", percentage);
+                }
+            }
+
+            if (probability > highestProb) {
+                highestProb = probability;
+                highestIndex = i;
+                highestClassName = className;
+            }
+        }
+
+        // 2차 순회: 1순위 클래스 하이라이트 적용
+        for (let i = 0; i < predictions.length; i++) {
+            const classItem = document.getElementById(`class-item-${i}`);
+            if (classItem) {
+                if (i === highestIndex) {
+                    classItem.classList.add("highlight");
+                } else {
+                    classItem.classList.remove("highlight");
+                }
+            }
+        }
+
+        // 상단 뱃지 텍스트 및 클래스별 개별 색상 뱃지 디자인 전환
+        topResultText.innerText = `${highestClassName} (${Math.round(highestProb * 100)}%)`;
+        
+        if (highestClassName.includes("켜짐")) {
+            topResultBadge.className = "status-badge on";
+        } else if (highestClassName.includes("꺼짐")) {
+            topResultBadge.className = "status-badge off";
+        } else {
+            topResultBadge.className = "status-badge";
+        }
+    }
+</script>
+
+</body>
+</html>
