@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>전기세 아끼기 - 에어컨 작동 여부 진단</title>
-    <!-- Teachable Machine 필수 라이브러리 (TensorFlow.js 및 Teachable Machine Image) -->
+    <!-- Teachable Machine 필수 라이브러리 -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
     <style>
@@ -13,20 +13,18 @@
             --primary: #00b4d8;
             --primary-hover: #0096c7;
             --primary-light: #e0f7fa;
-            --bg-main: #f0f8ff; /* 맑고 가벼운 시원한 배경 */
+            --bg-main: #f0f8ff;
             --surface: #ffffff;
             --text-main: #1e293b;
             --text-sub: #475569;
             --text-muted: #94a3b8;
             --border-color: #caf0f8;
             
-            /* 상태별 컬러 (켜짐: 시원한 민트블루 / 꺼짐: 포근한 슬레이트) */
             --status-on: #0284c7;
             --status-on-bg: #e0f2fe;
             --status-off: #64748b;
             --status-off-bg: #f1f5f9;
             
-            /* 동글동글한 라운딩 & 부드러운 입체 그림자 */
             --radius-main: 28px;
             --radius-sub: 20px;
             --radius-btn: 14px;
@@ -36,19 +34,18 @@
             --transition-smooth: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
-        /* 기본 리셋 및 전체 레이아웃 설정 */
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", sans-serif;
             -webkit-font-smoothing: antialiased;
         }
 
         body {
             background-color: var(--bg-main);
             background-image: radial-gradient(#bde0fe 1.5px, transparent 1.5px);
-            background-size: 24px 24px; /* 귀여운 도트 배경 패턴 */
+            background-size: 24px 24px;
             color: var(--text-main);
             line-height: 1.6;
             padding: 32px 16px;
@@ -68,12 +65,82 @@
             border: 3px solid #ffffff;
         }
 
-        /* 헤더 디자인 */
+        /* ──────────────────────────────────────
+           ✨ 상단 헤더 및 CSS 인라인 캐릭터
+        ────────────────────────────────────── */
         header {
+            position: relative;
             text-align: center;
             border-bottom: 2px dashed var(--border-color);
             padding-bottom: 22px;
             margin-bottom: 24px;
+        }
+
+        /* CSS로 자체 제작한 캐릭터 (이미지 파일 필요 없음) */
+        .css-character {
+            position: absolute;
+            right: 10px;
+            top: -12px;
+            width: 48px;
+            height: 44px;
+            background: #ffffff;
+            border: 3px solid #64b5f6;
+            border-radius: 50% 50% 45% 45%;
+            animation: floatChar 3s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        /* 캐릭터 파란 리본/귀 */
+        .css-character::before, .css-character::after {
+            content: '';
+            position: absolute;
+            top: -10px;
+            width: 18px;
+            height: 18px;
+            background: #64b5f6;
+            border-radius: 4px 12px 0 12px;
+        }
+        .css-character::before {
+            left: 2px;
+            transform: rotate(-15deg);
+        }
+        .css-character::after {
+            right: 2px;
+            transform: rotate(105deg);
+        }
+
+        /* 캐릭터 얼굴 (눈, 볼터치) */
+        .css-char-face {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+        .css-char-eyes {
+            position: absolute;
+            top: 18px;
+            left: 10px;
+            width: 5px;
+            height: 5px;
+            background: #333;
+            border-radius: 50%;
+            box-shadow: 18px 0 0 #333;
+        }
+        .css-char-cheeks {
+            position: absolute;
+            top: 22px;
+            left: 5px;
+            width: 8px;
+            height: 5px;
+            background: #ff8a80;
+            border-radius: 50%;
+            opacity: 0.8;
+            box-shadow: 24px 0 0 #ff8a80;
+        }
+
+        @keyframes floatChar {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-5px) rotate(4deg); }
         }
 
         header h1 {
@@ -81,7 +148,6 @@
             font-weight: 900;
             color: #0077b6;
             margin-bottom: 6px;
-            letter-spacing: -0.02em;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -94,7 +160,6 @@
             font-weight: 600;
         }
 
-        /* 정보 카드 스타일 */
         .info-card {
             background-color: var(--primary-light);
             border: 2px solid #bde0fe;
@@ -123,7 +188,6 @@
             margin-bottom: 0;
         }
 
-        /* 메인 카드 세부 스타일 */
         .main-card {
             background-color: var(--surface);
             border: 2px solid var(--border-color);
@@ -139,10 +203,8 @@
             color: #0077b6;
             margin-bottom: 18px;
             text-align: center;
-            letter-spacing: -0.01em;
         }
 
-        /* 귀여운 스위치 형태의 탭 버튼 */
         .tab-buttons {
             display: flex;
             gap: 8px;
@@ -171,7 +233,6 @@
             box-shadow: var(--shadow-sm);
         }
 
-        /* 입력 인터페이스 제어 */
         .input-control {
             display: none;
             margin-bottom: 20px;
@@ -187,7 +248,6 @@
             margin-bottom: 10px;
         }
 
-        /* 동글동글 인터랙티브 버튼 스타일 */
         .btn {
             flex: 1;
             padding: 13px 20px;
@@ -267,7 +327,6 @@
             transform: translateY(-2px);
         }
 
-        /* 디스플레이 컨테이너 */
         .display-container {
             width: 100%;
             height: 280px;
@@ -307,7 +366,6 @@
             line-height: 1.6;
         }
 
-        /* 세련된 로딩 스피너 UI */
         .spinner {
             display: none;
             width: 36px;
@@ -324,7 +382,6 @@
             100% { transform: rotate(360deg); }
         }
 
-        /* 피드백 메시지 스타일 */
         .status-message {
             font-size: 0.95rem;
             text-align: center;
@@ -347,7 +404,6 @@
             font-weight: 700;
         }
 
-        /* 상단 예측 결과 뱃지 디자인 */
         .result-box {
             background-color: #f8fafc;
             border: 2px solid var(--border-color);
@@ -392,7 +448,6 @@
             border: 2px solid var(--border-color);
         }
 
-        /* 상태별 뱃지 커스텀 */
         .status-badge.on {
             background-color: #e0f2fe;
             color: #0284c7;
@@ -420,7 +475,6 @@
             margin-top: 8px;
         }
 
-        /* 프로그래스 바 시각화 개선 */
         .class-result {
             margin-bottom: 12px;
             padding: 10px 14px;
@@ -470,7 +524,6 @@
             background-color: #94a3b8;
         }
 
-        /* 한계점 안내 카드 */
         .limitations {
             background-color: #fff9db;
             border: 2px solid #ffe066;
@@ -490,7 +543,6 @@
             font-weight: 800;
         }
 
-        /* 푸터 디자인 */
         footer {
             text-align: center;
             font-size: 0.88rem;
@@ -504,32 +556,34 @@
 <body>
 
 <div class="container">
-    <!-- 헤더 영역 -->
     <header>
+        <!-- ⬇️ CSS 기반 무배경(누끼) 캐릭터 -->
+        <div class="css-character">
+            <div class="css-char-face">
+                <div class="css-char-eyes"></div>
+                <div class="css-char-cheeks"></div>
+            </div>
+        </div>
+        
         <h1>❄️ 전기세 아끼기 ❄️</h1>
         <p>인공지능으로 에어컨의 켜짐/꺼짐 상태를 진단해요!</p>
     </header>
 
-    <!-- 문제 및 목표 안내 -->
     <div class="info-card">
         <p><strong>💡 해결하려는 문제:</strong> 교실 내 에어컨 작동 여부 확인</p>
         <p><strong>🏫 주요 사용자:</strong> 에어컨이 있는 교실을 사용하는 사람들</p>
     </div>
 
-    <!-- 메인 체험 기능 영역 -->
     <div class="main-card">
         <div class="section-title">✨ 에어컨 상태 분석해보기 ✨</div>
 
-        <!-- 입력 방식 선택 탭 -->
         <div class="tab-buttons">
             <button class="tab-btn active" id="btn-tab-camera" onclick="switchMode('camera')">📷 카메라 실시간</button>
             <button class="tab-btn" id="btn-tab-file" onclick="switchMode('file')">🖼️ 사진 업로드</button>
         </div>
 
-        <!-- 오류 메시지 출력 영역 -->
         <div id="error-message" class="error-message"></div>
 
-        <!-- 모드 1: 카메라 제어 버튼 -->
         <div id="camera-controls" class="input-control active">
             <div class="btn-group">
                 <button id="btn-camera-start" class="btn btn-primary" onclick="startCamera()">카메라 시작하기</button>
@@ -538,7 +592,6 @@
             <button id="btn-camera-stop" class="btn btn-danger" onclick="stopCamera()" style="display: none; width: 100%;">카메라 멈추기</button>
         </div>
 
-        <!-- 모드 2: 파일 업로드 제어 -->
         <div id="file-controls" class="input-control">
             <div class="file-input-wrapper">
                 <label for="image-upload" class="file-label" tabindex="0" onkeydown="handleLabelKeyDown(event)">📂 에어컨 사진 선택하기</label>
@@ -546,11 +599,9 @@
             </div>
         </div>
 
-        <!-- 상태 및 로딩 표시 -->
         <div id="spinner" class="spinner"></div>
         <div id="status-message" class="status-message">시작 버튼을 누르거나 사진을 올려주세요.</div>
 
-        <!-- 미디어 표시 영역 (드래그 앤 드롭 지원) -->
         <div class="display-container" id="display-container" 
              ondragover="handleDragOver(event)" 
              ondragleave="handleDragLeave(event)" 
@@ -559,10 +610,8 @@
             <img id="image-preview" style="display: none;" alt="업로드 에어컨 사진 미리보기">
         </div>
 
-        <!-- 사진 리셋 버튼 -->
         <button id="btn-reset-file" class="btn btn-secondary" onclick="resetFilePreview()" style="display: none; width: 100%; margin-bottom: 20px;">🔄 사진 다시 올려보기</button>
 
-        <!-- 예측 결과 표시 영역 -->
         <div class="result-box">
             <div class="top-prediction">
                 <div class="label">가장 높은 확률의 예측 결과</div>
@@ -573,38 +622,32 @@
                 </div>
                 <div class="notice">※ 가장 높은 확률이 반드시 정답은 아닐 수 있습니다.</div>
             </div>
-            <!-- 클래스별 확률 목록이 생성되는 곳 -->
             <div id="class-results-list"></div>
         </div>
     </div>
 
-    <!-- 모델의 한계 및 주의사항 -->
     <div class="limitations">
         <strong>⚠️ 모델의 한계 및 확인 필요 사항</strong>
         사진 각도가 너무 멀거나 날개의 움직임을 잘 확인할 수 없는 경우 에어컨의 켜짐과 꺼짐을 잘 구분하지 못할 수 있습니다. <u>결과를 사람의 눈으로 다시 한 번 확인해주세요!</u>
     </div>
 
-    <!-- 팀 정보 푸터 -->
     <footer>
         <p>팀명: 졸리당 | 팀원: 이예림, 이은별, 이지민</p>
     </footer>
 </div>
 
 <script>
-    // 티처블 머신 모델 주소 설정 (끝에 / 붙임)
     const MODEL_URL = "https://teachablemachine.withgoogle.com/models/79O8wPhIq/";
 
-    // 상태 관리 변수
     let model = null;
     let webcam = null;
     let isModelLoading = false;
     let isPredicting = false;
     let animationFrameId = null;
-    let currentMode = 'camera'; // 'camera' 또는 'file'
+    let currentMode = 'camera';
     let currentObjectURL = null;
-    let useFacingMode = "environment"; // "user"(전면) 또는 "environment"(후면)
+    let useFacingMode = "environment";
 
-    // DOM 요소 참조
     const statusMsg = document.getElementById("status-message");
     const errorMsg = document.getElementById("error-message");
     const spinner = document.getElementById("spinner");
@@ -619,24 +662,20 @@
     const btnCameraFlip = document.getElementById("btn-camera-flip");
     const btnResetFile = document.getElementById("btn-reset-file");
 
-    // 에러 메시지 표시
     function showError(message) {
         errorMsg.innerText = message;
         errorMsg.style.display = "block";
     }
 
-    // 에러 메시지 초기화
     function clearError() {
         errorMsg.innerText = "";
         errorMsg.style.display = "none";
     }
 
-    // 스피너 토글
     function toggleSpinner(show) {
         spinner.style.display = show ? "block" : "none";
     }
 
-    // 모델 로드 함수
     async function loadModel() {
         if (model) return true;
         if (isModelLoading) return false;
@@ -667,7 +706,6 @@
         }
     }
 
-    // 메타데이터의 실제 클래스 이름을 바탕으로 접근성 및 맞춤형 테마 클래스 UI 생성
     function setupResultUI() {
         classResultsList.innerHTML = "";
         const maxPredictions = model.getTotalClasses();
@@ -675,7 +713,6 @@
         for (let i = 0; i < maxPredictions; i++) {
             const className = model.getClassLabels()[i];
             
-            // 상태별 색상 테마 구분을 위한 클래스 지정
             let themeClass = "";
             if (className.includes("켜짐")) {
                 themeClass = "is-on";
@@ -705,7 +742,6 @@
         }
     }
 
-    // 입력 모드 전환 (카메라 <-> 사진 업로드)
     function switchMode(mode) {
         if (currentMode === mode) return;
         currentMode = mode;
@@ -726,7 +762,6 @@
         }
     }
 
-    // 카메라 시작
     async function startCamera() {
         clearError();
         btnCameraStart.disabled = true;
@@ -773,7 +808,6 @@
         }
     }
 
-    // 전/후면 카메라 전환
     async function toggleCameraFacing() {
         useFacingMode = (useFacingMode === "user") ? "environment" : "user";
         if (isPredicting) {
@@ -781,7 +815,6 @@
         }
     }
 
-    // 카메라 지속 예측 루프
     async function loopCamera() {
         if (isPredicting && webcam) {
             webcam.update();
@@ -790,7 +823,6 @@
         }
     }
 
-    // 카메라 중지 및 정리
     function stopCamera() {
         isPredicting = false;
         if (animationFrameId) {
@@ -817,7 +849,6 @@
         }
     }
 
-    // 이미지 파일 선택 처리
     function handleImageUpload(event) {
         const file = event.target.files[0];
         if (file) {
@@ -825,7 +856,6 @@
         }
     }
 
-    // 키보드 접근성: Label에서 Enter 키 눌렀을 때 파일 창 열기
     function handleLabelKeyDown(event) {
         if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
@@ -833,7 +863,6 @@
         }
     }
 
-    // 드래그 앤 드롭 이벤트 처리
     function handleDragOver(event) {
         event.preventDefault();
         if (currentMode === 'file') {
@@ -860,7 +889,6 @@
         }
     }
 
-    // 이미지 파일 통합 검증 및 분석
     async function processImageFile(file) {
         clearError();
 
@@ -909,7 +937,6 @@
         };
     }
 
-    // 화면 영역 초기화
     function resetDisplayArea() {
         placeholderText.style.display = "none";
         imagePreview.style.display = "none";
@@ -919,7 +946,6 @@
         }
     }
 
-    // 파일 미리보기 및 결과 완전 리셋
     function resetFilePreview() {
         if (currentObjectURL) {
             URL.revokeObjectURL(currentObjectURL);
@@ -942,7 +968,6 @@
         }
     }
 
-    // 모델 분석 및 뱃지/테마 시각화 공통 처리 함수
     async function predict(imageElement) {
         if (!model) return;
 
@@ -952,7 +977,6 @@
         let highestIndex = -1;
         let highestClassName = "";
 
-        // 1차 순회: 최고 확률 탐색 및 프로그래스 바 수치 업데이트
         for (let i = 0; i < predictions.length; i++) {
             const className = predictions[i].className;
             const probability = predictions[i].probability;
@@ -977,7 +1001,6 @@
             }
         }
 
-        // 2차 순회: 1순위 클래스 하이라이트 적용
         for (let i = 0; i < predictions.length; i++) {
             const classItem = document.getElementById(`class-item-${i}`);
             if (classItem) {
@@ -989,7 +1012,6 @@
             }
         }
 
-        // 상단 뱃지 텍스트 및 클래스별 개별 색상 뱃지 디자인 전환
         topResultText.innerText = `${highestClassName} (${Math.round(highestProb * 100)}%)`;
         
         if (highestClassName.includes("켜짐")) {
